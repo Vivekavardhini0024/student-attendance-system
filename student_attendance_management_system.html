@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Student Attendance Management System</title>
+<style>
+:root{--navy:#172554;--blue:#2563eb;--bg:#f3f6fb;--ink:#172033;--muted:#64748b}
+*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;background:var(--bg);color:var(--ink)}
+header{background:linear-gradient(120deg,#172554,#2563eb);color:white;padding:26px 6%;}header h1{margin:0 0 8px;font-size:clamp(22px,4vw,32px)}header p{margin:0;color:#dbeafe}
+main{max-width:1050px;margin:25px auto;padding:0 16px}.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:18px}.card,.panel{background:white;border-radius:14px;padding:18px;box-shadow:0 5px 20px #0f172a0c}.stat-label{color:var(--muted);font-size:14px}.stat-num{font-size:28px;font-weight:700;margin-top:7px}
+.panel{margin-bottom:18px}.panel h2{font-size:19px;margin:0 0 15px}.controls{display:flex;gap:10px;flex-wrap:wrap;align-items:end}.field{display:flex;flex-direction:column;gap:6px;flex:1;min-width:150px}label{font-size:13px;color:var(--muted)}input,select{padding:11px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;background:white}
+button{border:0;border-radius:8px;padding:11px 15px;background:var(--blue);color:white;font-weight:600;cursor:pointer}button.secondary{background:#e2e8f0;color:#1e293b}button.danger{background:#dc2626}.actions{display:flex;gap:8px;flex-wrap:wrap}
+table{width:100%;border-collapse:collapse;min-width:570px}th,td{text-align:left;padding:12px 10px;border-bottom:1px solid #e2e8f0;font-size:14px}th{color:#475569;background:#f8fafc}td select{padding:7px}.table-wrap{overflow-x:auto}.empty{text-align:center;color:var(--muted);padding:25px}
+.note{font-size:13px;color:var(--muted);line-height:1.5}
+@media(max-width:600px){.stats{grid-template-columns:1fr}.controls button{width:100%}}
+</style>
+</head>
+<body>
+<header><h1>Student Attendance Management System</h1><p>Manage students, mark daily attendance and view attendance summaries.</p></header>
+<main>
+<section class="stats">
+<div class="card"><div class="stat-label">Total Students</div><div class="stat-num" id="total">0</div></div>
+<div class="card"><div class="stat-label">Present Today</div><div class="stat-num" id="present">0</div></div>
+<div class="card"><div class="stat-label">Absent Today</div><div class="stat-num" id="absent">0</div></div>
+</section>
+<section class="panel">
+<h2>Add Student</h2>
+<div class="controls">
+<div class="field"><label for="roll">Roll Number</label><input id="roll" placeholder="e.g. 101"></div>
+<div class="field"><label for="name">Student Name</label><input id="name" placeholder="Enter student name"></div>
+<button onclick="addStudent()">Add Student</button>
+</div>
+</section>
+<section class="panel">
+<h2>Mark Attendance</h2>
+<div class="controls" style="margin-bottom:15px">
+<div class="field"><label for="date">Attendance Date</label><input type="date" id="date"></div>
+<button class="secondary" onclick="setAll('Present')">Mark All Present</button>
+<button class="secondary" onclick="setAll('Absent')">Mark All Absent</button>
+<button onclick="saveAttendance()">Save Attendance</button>
+</div>
+<div class="table-wrap"><table><thead><tr><th>Roll No.</th><th>Student Name</th><th>Status</th></tr></thead><tbody id="students"></tbody></table></div>
+<p class="note">Attendance is saved in this browser on this device. Use Export CSV to download a copy.</p>
+</section>
+<section class="panel">
+<div class="controls" style="justify-content:space-between;margin-bottom:12px"><h2 style="margin:0">Attendance Report</h2><div class="actions"><button class="secondary" onclick="exportCSV()">Export CSV</button><button class="danger" onclick="clearData()">Clear All Data</button></div></div>
+<div class="table-wrap"><table><thead><tr><th>Roll No.</th><th>Student Name</th><th>Present Days</th><th>Absent Days</th><th>Attendance %</th></tr></thead><tbody id="report"></tbody></table></div>
+</section>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+let students=JSON.parse(localStorage.getItem('att_students')||'[]');
+let records=JSON.parse(localStorage.getItem('att_records')||'{}');
+$('date').value=new Date().toISOString().slice(0,10);
+function persist(){localStorage.setItem('att_students',JSON.stringify(students));localStorage.setItem('att_records',JSON.stringify(records));render()}
+function addStudent(){
+ const roll=$('roll').value.trim(),name=$('name').value.trim();
+ if(!roll||!name){alert('Please enter both roll number and student name.');return}
+ if(students.some(s=>s.roll.toLowerCase()===roll.toLowerCase())){alert('This roll number already exists.');return}
+ students.push({roll,name});$('roll').value='';$('name').value='';persist();
+}
+function render(){
+ const date=$('date').value;const today=records[date]||{};
+ $('total').textContent=students.length;
+ $('present').textContent=students.filter(s=>today[s.roll]==='Present').length;
+ $('absent').textContent=students.filter(s=>today[s.roll]==='Absent').length;
+ $('students').innerHTML=students.length?students.map(s=>`<tr><td>${esc(s.roll)}</td><td>${esc(s.name)}</td><td><select data-roll="${esc(s.roll)}"><option ${today[s.roll]==='Present'?'selected':''}>Present</option><option ${today[s.roll]==='Absent'?'selected':''}>Absent</option><option value="" ${!today[s.roll]?'selected':''}>Not marked</option></select></td></tr>`).join(''):'<tr><td colspan="3" class="empty">No students added yet. Add students above to begin.</td></tr>';
+ const dates=Object.keys(records);
+ $('report').innerHTML=students.length?students.map(s=>{let p=0,a=0;dates.forEach(d=>{if(records[d][s.roll]==='Present')p++;if(records[d][s.roll]==='Absent')a++});let n=p+a,pc=n?Math.round(p/n*100):0;return `<tr><td>${esc(s.roll)}</td><td>${esc(s.name)}</td><td>${p}</td><td>${a}</td><td>${n?pc+'%':'—'}</td></tr>`}).join(''):'<tr><td colspan="5" class="empty">No report available yet.</td></tr>';
+}
+function esc(v){return String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function setAll(status){document.querySelectorAll('#students select').forEach(x=>x.value=status)}
+function saveAttendance(){
+ const date=$('date').value;if(!date){alert('Choose a date first.');return}
+ records[date]={};document.querySelectorAll('#students select').forEach(x=>{if(x.value)records[date][x.dataset.roll]=x.value});
+ persist();alert('Attendance saved successfully.');
+}
+function exportCSV(){
+ const rows=[['Date','Roll Number','Student Name','Status']];
+ Object.keys(records).sort().forEach(d=>students.forEach(s=>{if(records[d][s.roll])rows.push([d,s.roll,s.name,records[d][s.roll]])}));
+ const csv=rows.map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\n');
+ const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='attendance-report.csv';a.click();URL.revokeObjectURL(a.href);
+}
+function clearData(){if(confirm('Delete all students and attendance records from this browser?')){students=[];records={};persist()}}
+$('date').addEventListener('change',render);render();
+</script>
+</body>
+</html>
